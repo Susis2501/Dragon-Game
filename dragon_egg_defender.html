@@ -1,0 +1,1477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dragon's Nest — Egg Defender</title>
+<link href="https://fonts.googleapis.com/css2?family=MedievalSharp&family=Cinzel:wght@400;700;900&family=Cinzel+Decorative:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --sky-top: #1a0a2e;
+    --sky-mid: #3d1a5a;
+    --sky-bot: #7b2d00;
+    --ground: #2a1505;
+    --ground-top: #3d1f08;
+    --accent-fire: #ff6a00;
+    --accent-gold: #ffd700;
+    --accent-blue: #00cfff;
+    --text-light: #ffe8c0;
+    --text-dim: #aa8844;
+    --ui-bg: rgba(10,4,2,0.82);
+    --ui-border: #7a4a10;
+    --hp-red: #e03030;
+    --hp-green: #3dcc5f;
+    --night-sky-top: #000005;
+    --night-sky-mid: #08001a;
+    --night-sky-bot: #1a0505;
+    --day: 1;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #000;
+    overflow: hidden;
+    font-family: 'Cinzel', serif;
+    user-select: none;
+    cursor: crosshair;
+  }
+
+  #gameCanvas {
+    display: block;
+    margin: 0 auto;
+    image-rendering: pixelated;
+  }
+
+  /* ─── HUD ─── */
+  #hud {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: 10px 18px;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  #hud-left { display: flex; flex-direction: column; gap: 6px; }
+
+  .stat-row {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--ui-bg);
+    border: 1px solid var(--ui-border);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 13px;
+    color: var(--text-light);
+  }
+
+  .bar-wrap { width: 120px; height: 10px; background: #330; border-radius: 4px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 4px; transition: width 0.2s; }
+  #hp-bar { background: var(--hp-red); }
+  #score-val { color: var(--accent-gold); font-weight: 700; font-size: 15px; }
+
+  /* ─── ABILITIES ─── */
+  #abilities {
+    position: fixed;
+    bottom: 16px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 14px;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  .ability-slot {
+    width: 62px; height: 62px;
+    border: 2px solid #5a3010;
+    border-radius: 10px;
+    background: var(--ui-bg);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    position: relative;
+    transition: border-color 0.3s, opacity 0.3s;
+  }
+  .ability-slot.locked { opacity: 0.25; }
+  .ability-slot.ready { border-color: var(--accent-gold); box-shadow: 0 0 8px var(--accent-gold); }
+  .ability-slot.active { border-color: var(--accent-blue); box-shadow: 0 0 14px var(--accent-blue); }
+
+  .ability-icon { font-size: 26px; line-height: 1; }
+  .ability-key {
+    position: absolute; top: 3px; right: 5px;
+    font-size: 9px; color: var(--text-dim); font-family: monospace;
+  }
+  .ability-cd {
+    position: absolute; bottom: 3px;
+    font-size: 9px; color: var(--accent-fire); font-family: monospace;
+  }
+  .ability-overlay {
+    position: absolute; inset: 0;
+    background: rgba(0,0,0,0.65);
+    border-radius: 8px;
+    display: none;
+    align-items: flex-end; justify-content: center;
+    padding-bottom: 3px;
+    color: #ccc; font-size: 10px; font-family: monospace;
+  }
+  .ability-slot.cooling .ability-overlay { display: flex; }
+
+  /* ─── EGGS HUD ─── */
+  #eggs-hud {
+    position: fixed;
+    top: 10px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 20px;
+    z-index: 10;
+    pointer-events: none;
+  }
+
+  .egg-item {
+    display: flex; flex-direction: column; align-items: center;
+    gap: 3px;
+  }
+  .egg-icon { font-size: 26px; transition: filter 0.5s; }
+  .egg-icon.hatched { filter: grayscale(1) opacity(0.4); }
+  .egg-timer-bar { width: 40px; height: 5px; background: #330; border-radius: 3px; overflow: hidden; }
+  .egg-timer-fill { height: 100%; background: var(--accent-gold); transition: width 0.5s linear; border-radius: 3px; }
+
+  /* ─── WAVE INFO ─── */
+  #wave-info {
+    position: fixed;
+    top: 10px; right: 18px;
+    background: var(--ui-bg);
+    border: 1px solid var(--ui-border);
+    border-radius: 8px;
+    padding: 6px 12px;
+    color: var(--text-light);
+    font-size: 12px;
+    pointer-events: none;
+    z-index: 10;
+    text-align: right;
+  }
+  #wave-info span { color: var(--accent-gold); font-weight: 700; }
+
+  /* ─── OVERLAYS ─── */
+  .overlay {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    z-index: 50;
+    background: rgba(0,0,0,0.82);
+  }
+  .overlay h1 {
+    font-family: 'Cinzel Decorative', serif;
+    font-size: clamp(28px, 6vw, 56px);
+    color: var(--accent-gold);
+    text-shadow: 0 0 30px #ff6a00, 0 2px 6px #000;
+    margin-bottom: 14px;
+    text-align: center;
+  }
+  .overlay p {
+    color: var(--text-light);
+    font-size: 15px; max-width: 520px;
+    text-align: center; line-height: 1.7;
+    margin-bottom: 10px;
+  }
+  .btn {
+    margin-top: 14px;
+    padding: 12px 36px;
+    border: 2px solid var(--accent-gold);
+    background: transparent;
+    color: var(--accent-gold);
+    font-family: 'Cinzel', serif;
+    font-size: 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    pointer-events: all;
+    transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+  }
+  .btn:hover { background: var(--accent-gold); color: #000; box-shadow: 0 0 18px var(--accent-gold); }
+  .btn-blue { border-color: var(--accent-blue); color: var(--accent-blue); }
+  .btn-blue:hover { background: var(--accent-blue); color: #000; box-shadow: 0 0 18px var(--accent-blue); }
+
+  #hatch-announce {
+    position: fixed; top: 80px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.88);
+    border: 2px solid var(--accent-gold);
+    border-radius: 12px;
+    padding: 14px 28px;
+    color: var(--accent-gold);
+    font-size: 18px;
+    font-family: 'Cinzel Decorative', serif;
+    text-align: center;
+    z-index: 20;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.5s;
+  }
+
+  #frenzy-announce {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    z-index: 30;
+    background: radial-gradient(ellipse at center, rgba(80,0,0,0.7) 0%, rgba(0,0,0,0.95) 100%);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 1s;
+  }
+  #frenzy-announce h2 {
+    font-family: 'Cinzel Decorative', serif;
+    font-size: clamp(32px, 8vw, 72px);
+    color: #ff2200;
+    text-shadow: 0 0 40px #ff0000, 0 0 80px #ff4400;
+    animation: flicker 0.15s infinite alternate;
+  }
+  @keyframes flicker { from { opacity: 1; } to { opacity: 0.75; } }
+
+  #endless-timer {
+    position: fixed;
+    top: 10px; left: 18px;
+    background: var(--ui-bg);
+    border: 1px solid #44f;
+    border-radius: 8px;
+    padding: 5px 12px;
+    color: #aaf;
+    font-size: 13px;
+    pointer-events: none;
+    z-index: 10;
+    display: none;
+  }
+  #endless-timer span { color: #fff; font-weight: 700; }
+</style>
+</head>
+<body>
+
+<canvas id="gameCanvas"></canvas>
+
+<!-- HUD -->
+<div id="hud">
+  <div id="hud-left">
+    <div class="stat-row">
+      🐉 <div class="bar-wrap"><div class="bar-fill" id="hp-bar" style="width:100%"></div></div>
+      <span id="hp-text">100/100</span>
+    </div>
+    <div class="stat-row">🏆 Score: <span id="score-val">0</span></div>
+  </div>
+</div>
+
+<div id="eggs-hud">
+  <div class="egg-item" id="egg0">
+    <div class="egg-icon" id="egg-icon0">🥚</div>
+    <div class="egg-timer-bar"><div class="egg-timer-fill" id="egg-fill0" style="width:100%"></div></div>
+  </div>
+  <div class="egg-item" id="egg1">
+    <div class="egg-icon" id="egg-icon1">🥚</div>
+    <div class="egg-timer-bar"><div class="egg-timer-fill" id="egg-fill1" style="width:100%"></div></div>
+  </div>
+  <div class="egg-item" id="egg2">
+    <div class="egg-icon" id="egg-icon2">🥚</div>
+    <div class="egg-timer-bar"><div class="egg-timer-fill" id="egg-fill2" style="width:100%"></div></div>
+  </div>
+</div>
+
+<div id="wave-info">
+  Wave <span id="wave-num">1</span> &nbsp;|&nbsp; Enemies: <span id="enemy-count">0</span>
+</div>
+
+<div id="endless-timer">
+  Wave <span id="endless-wave">1</span> · Next: <span id="wave-cd">2:00</span>
+</div>
+
+<!-- Abilities bar -->
+<div id="abilities">
+  <div class="ability-slot locked" id="ab1" title="[Q] Baby Dragon Sweep">
+    <span class="ability-key">Q</span>
+    <span class="ability-icon">🐣</span>
+    <span class="ability-cd" id="ab1-cd"></span>
+    <div class="ability-overlay" id="ab1-ov">—</div>
+  </div>
+  <div class="ability-slot locked" id="ab2" title="[E] Blue Flame">
+    <span class="ability-key">E</span>
+    <span class="ability-icon">💙</span>
+    <span class="ability-cd" id="ab2-cd"></span>
+    <div class="ability-overlay" id="ab2-ov">—</div>
+  </div>
+  <div class="ability-slot locked" id="ab3" title="[R] True Dragon Ascension">
+    <span class="ability-key">R</span>
+    <span class="ability-icon">🔥</span>
+    <span class="ability-cd" id="ab3-cd"></span>
+    <div class="ability-overlay" id="ab3-ov">—</div>
+  </div>
+</div>
+
+<!-- Hatch announcement -->
+<div id="hatch-announce"></div>
+
+<!-- Frenzy announce -->
+<div id="frenzy-announce">
+  <h2>☽ FRENZY MODE ☽</h2>
+  <p style="color:#ff8888;font-size:18px;margin-top:18px;font-family:'Cinzel',serif;">The night has come. True Dragon awakens.</p>
+</div>
+
+<!-- Start screen -->
+<div class="overlay" id="startScreen">
+  <h1>🐉 Dragon's Nest</h1>
+  <p>You are an ancient dragon guarding your clutch of eggs.<br>
+  Protect them from invaders! Shoot fireballs with <b>Left Click</b>.<br>
+  Unlock abilities as each egg hatches every 5 minutes.<br>
+  Press <b>Q / E / R</b> to activate abilities.</p>
+  <button class="btn" onclick="startGame()">BEGIN</button>
+</div>
+
+<!-- Victory / endless screen -->
+<div class="overlay" id="victoryScreen" style="display:none">
+  <h1>🏆 Victory!</h1>
+  <p id="victory-text">All eggs have hatched and your nest is safe!<br>You have proven yourself a true dragon.</p>
+  <div style="display:flex;gap:20px;flex-wrap:wrap;justify-content:center">
+    <button class="btn" id="btn-end" onclick="endGame()">End & See Score</button>
+    <button class="btn btn-blue" onclick="startEndless()">⚡ Endless Mode</button>
+  </div>
+</div>
+
+<!-- Game over screen -->
+<div class="overlay" id="gameOverScreen" style="display:none">
+  <h1 style="color:#e03030">💀 Nest Destroyed</h1>
+  <p id="go-text"></p>
+  <button class="btn" onclick="location.reload()">Try Again</button>
+</div>
+
+<!-- Score screen -->
+<div class="overlay" id="scoreScreen" style="display:none">
+  <h1>Final Score</h1>
+  <p id="final-score-text"></p>
+  <button class="btn" onclick="location.reload()">Play Again</button>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════
+//  DRAGON'S NEST — GAME ENGINE
+// ═══════════════════════════════════════════════════════════════════
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', () => { resize(); });
+
+// ── TIME ──────────────────────────────────────────────────────────
+const EGG_HATCH_TIME = 2 * 60 * 1000; // 2 min
+const ENDLESS_WAVE_TIME = 2 * 60 * 1000;
+
+// ── STATE ─────────────────────────────────────────────────────────
+let gameRunning = false;
+let startTime = 0;
+let score = 0;
+let isNight = false;
+let isFrenzy = false;
+let isEndless = false;
+let endlessWave = 1;
+let endlessWaveStart = 0;
+
+// PLAYER
+const player = {
+  hp: 100, maxHp: 100,
+  x: 0, y: 0,
+  fireballsShot: 0,
+};
+
+// EGGS: 0,1,2 → hatched at 5,10,15 min
+const eggs = [
+  { hatched: false, hatchTime: EGG_HATCH_TIME },
+  { hatched: false, hatchTime: EGG_HATCH_TIME * 2 },
+  { hatched: false, hatchTime: EGG_HATCH_TIME * 3 },
+];
+let eggsHatched = 0;
+
+// ABILITIES
+//  ab1: sweep (Q), ab2: blue flame (E), ab3: true dragon (R)
+const ab1 = { unlocked: false, cooldown: 12000, lastUsed: -99999, active: false };
+const ab2 = { unlocked: false, cooldown: 15000, lastUsed: -99999, active: false, duration: 10000, activeEnd: 0 };
+const ab3 = { unlocked: false, cooldown: 7000, lastUsed: -99999, active: false, duration: 10000, activeEnd: 0, used: false };
+let trueForm = false; // after ab3 first use
+
+// PROJECTILES
+let fireballs = [];
+let sweepDragons = [];
+
+// ENEMIES
+let enemies = [];
+let spawnTimer = 0;
+let spawnInterval = 2800;
+
+// PARTICLES
+let particles = [];
+
+// BABY DRAGONS (visual companions)
+let babyDragons = [];
+
+// MOUSE
+let mouseX = 0, mouseY = 0;
+
+// ── CONSTANTS ─────────────────────────────────────────────────────
+const GROUND_Y_FRAC = 0.78; // fraction of canvas height
+const FIREBALL_SPEED = 7;
+const BLUE_FIREBALL_SPEED = 9;
+const FLAMETHROWER_RANGE = 340;
+
+// Enemy types
+const ENEMY_TYPES = [
+  { name: 'wyvern',    emoji: '🦎', hp: 2, speed: 1.2, score: 10, size: 34, dmg: 8  },
+  { name: 'harpy',     emoji: '🦅', hp: 1, speed: 2.0, score: 15, size: 28, dmg: 5  },
+  { name: 'troll',     emoji: '👹', hp: 4, speed: 0.7, score: 20, size: 42, dmg: 15 },
+  { name: 'serpent',   emoji: '🐍', hp: 3, speed: 1.5, score: 18, size: 36, dmg: 10 },
+  { name: 'golem',     emoji: '🪨', hp: 8, speed: 0.5, score: 35, size: 50, dmg: 20 },
+  { name: 'vampire',   emoji: '🧛', hp: 2, speed: 1.8, score: 22, size: 30, dmg: 12 },
+  { name: 'demon',     emoji: '😈', hp: 5, speed: 1.3, score: 28, size: 40, dmg: 14 },
+  { name: 'lich',      emoji: '💀', hp: 6, speed: 1.0, score: 32, size: 44, dmg: 18 },
+];
+
+// ── INPUT ─────────────────────────────────────────────────────────
+canvas.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; });
+canvas.addEventListener('click', e => {
+  if (!gameRunning) return;
+  shootFireball(e.clientX, e.clientY);
+});
+
+document.addEventListener('keydown', e => {
+  if (!gameRunning) return;
+  const k = e.key.toLowerCase();
+  if (k === 'q') useAb1();
+  if (k === 'e') useAb2();
+  if (k === 'r') useAb3();
+});
+
+// Touch support for ability slots
+document.getElementById('ab1').addEventListener('touchstart', e => { e.preventDefault(); if (gameRunning) useAb1(); }, { passive: false });
+document.getElementById('ab2').addEventListener('touchstart', e => { e.preventDefault(); if (gameRunning) useAb2(); }, { passive: false });
+document.getElementById('ab3').addEventListener('touchstart', e => { e.preventDefault(); if (gameRunning) useAb3(); }, { passive: false });
+
+// Make ability slots pointer-events enabled for touch
+document.getElementById('abilities').style.pointerEvents = 'auto';
+
+// Touch-to-shoot on canvas
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  if (!gameRunning) return;
+  const t = e.changedTouches[0];
+  mouseX = t.clientX; mouseY = t.clientY;
+  shootFireball(t.clientX, t.clientY);
+}, { passive: false });
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  const t = e.changedTouches[0];
+  mouseX = t.clientX; mouseY = t.clientY;
+}, { passive: false });
+
+// ── START ─────────────────────────────────────────────────────────
+function startGame() {
+  document.getElementById('startScreen').style.display = 'none';
+  gameRunning = true;
+  startTime = performance.now();
+  player.hp = player.maxHp = 100;
+  player.x = canvas.width / 2;
+  player.y = canvas.height * GROUND_Y_FRAC;
+  spawnTimer = startTime;
+  requestAnimationFrame(gameLoop);
+}
+
+// ── MAIN LOOP ─────────────────────────────────────────────────────
+let lastFrame = 0;
+function gameLoop(ts) {
+  if (!gameRunning) return;
+  const dt = ts - lastFrame;
+  lastFrame = ts;
+
+  update(ts, dt);
+  render(ts);
+  requestAnimationFrame(gameLoop);
+}
+
+// ── UPDATE ────────────────────────────────────────────────────────
+function update(ts, dt) {
+  const elapsed = ts - startTime;
+
+  // Egg hatching
+  for (let i = 0; i < 3; i++) {
+    if (!eggs[i].hatched && elapsed >= eggs[i].hatchTime) {
+      hatchEgg(i, ts);
+    }
+    // Update egg timer bar
+    if (!eggs[i].hatched) {
+      const frac = Math.min(1, elapsed / eggs[i].hatchTime);
+      document.getElementById('egg-fill' + i).style.width = (frac * 100) + '%';
+    }
+  }
+
+  // Spawn enemies
+  if (ts - spawnTimer > spawnInterval) {
+    spawnEnemy(ts);
+    spawnTimer = ts;
+    // Accelerate spawns over time
+    spawnInterval = Math.max(600, spawnInterval - 12);
+    if (isFrenzy) spawnInterval = Math.max(350, spawnInterval - 8);
+  }
+
+  // Move enemies
+  enemies.forEach(e => {
+    const fm = isFrenzy ? 1.4 : 1;
+    if (e.aerial) {
+      e.x += e.vx * fm + Math.sin(ts * 0.003 + e.wobblePhase) * 0.8;
+      e.y += e.vy * fm;
+    } else {
+      e.x += e.vx * fm;
+      e.y = e.baseY + Math.sin(ts * 0.003 + e.phase) * 5;
+    }
+  });
+
+  // Move fireballs
+  fireballs = fireballs.filter(f => {
+    f.x += f.vx; f.y += f.vy;
+    f.life--;
+    return f.life > 0 && f.x > -100 && f.x < canvas.width + 100 && f.y > -100 && f.y < canvas.height + 100;
+  });
+
+  // Flamethrower (active ab3 or trueForm passive ab2)
+  if (isFlamethrowerActive(ts)) {
+    flamethrowerTick(ts, dt);
+  }
+
+  // Collision fireballs ↔ enemies
+  fireballs.forEach((f, fi) => {
+    enemies.forEach((e, ei) => {
+      const dx = f.x - e.x, dy = f.y - e.y;
+      if (Math.sqrt(dx*dx + dy*dy) < (e.size * 0.5 + f.r)) {
+        const dmg = f.blue ? 2 : 1;
+        e.hp -= dmg;
+        spawnHitParticles(e.x, e.y, f.blue ? '#00cfff' : '#ff6a00', 6);
+        fireballs.splice(fi, 1);
+        if (e.hp <= 0) killEnemy(ei, e, ts);
+      }
+    });
+  });
+
+  // Sweep dragons
+  sweepDragons.forEach(s => { s.x += s.vx; });
+  sweepDragons = sweepDragons.filter(s => s.x < canvas.width + 200 && s.x > -200);
+
+  // Sweep damage
+  sweepDragons.forEach(s => {
+    enemies.forEach((e, ei) => {
+      if (Math.abs(s.x - e.x) < 40 && !s.hit.has(ei)) {
+        s.hit.add(ei);
+        const dmg = trueForm ? 2.5 : 1.5;
+        e.hp -= dmg;
+        spawnHitParticles(e.x, e.y, '#00cfff', 8);
+        if (e.hp <= 0) killEnemy(ei, e, ts);
+      }
+    });
+  });
+
+  // Enemies reach nest
+  const GY_nest = canvas.height * GROUND_Y_FRAC;
+  enemies = enemies.filter(e => {
+    const reachedGround = e.aerial ? (e.y >= GY_nest - 10) : (Math.abs(e.x - player.x) < 60);
+    const reachedNest   = e.aerial ? (Math.abs(e.x - player.x) < 80 && e.y >= GY_nest - 60) : reachedGround;
+    if (reachedGround || reachedNest) {
+      player.hp = Math.max(0, player.hp - e.dmg);
+      spawnHitParticles(player.x + (Math.random()-0.5)*40, player.y - 20, '#ff2200', 10);
+      return false;
+    }
+    // Remove aerial enemies that fly off screen sideways
+    if (e.aerial && (e.x < -100 || e.x > canvas.width + 100)) return false;
+    return true;
+  });
+
+  // Particles
+  particles = particles.filter(p => {
+    p.x += p.vx; p.y += p.vy; p.vy += 0.12; p.life--;
+    return p.life > 0;
+  });
+
+  // Update HUD
+  updateHUD(ts);
+
+  // Check ability expirations
+  checkAbilityExpiry(ts);
+
+  // Death
+  if (player.hp <= 0) {
+    gameOver("Your nest was overwhelmed. The eggs are lost.");
+    return;
+  }
+
+  // Victory check (15 min after start + 5 min grace for last egg → 20 min?)
+  // Actually: after ALL 3 eggs hatch (15 min) + another 5 min = 20 min total
+  const finalVictoryTime = EGG_HATCH_TIME * 3 + EGG_HATCH_TIME;
+  if (!isEndless && eggsHatched >= 3 && elapsed >= finalVictoryTime) {
+    showVictory();
+  }
+
+  // Endless wave
+  if (isEndless) {
+    const waveElapsed = ts - endlessWaveStart;
+    if (waveElapsed >= ENDLESS_WAVE_TIME) {
+      endlessWave++;
+      endlessWaveStart = ts;
+      spawnInterval = Math.max(300, spawnInterval - 60);
+      flashWaveStart();
+    }
+    updateEndlessTimer(ts);
+  }
+
+  // Score display
+  document.getElementById('score-val').textContent = score;
+  document.getElementById('enemy-count').textContent = enemies.length;
+  document.getElementById('wave-num').textContent = endlessWave;
+}
+
+// ── RENDER ────────────────────────────────────────────────────────
+function render(ts) {
+  const W = canvas.width, H = canvas.height;
+  const GY = Math.floor(H * GROUND_Y_FRAC);
+
+  ctx.clearRect(0, 0, W, H);
+
+  // Sky gradient
+  const skyGrad = ctx.createLinearGradient(0, 0, 0, GY);
+  if (isNight) {
+    skyGrad.addColorStop(0,   '#000008');
+    skyGrad.addColorStop(0.5, '#0a0020');
+    skyGrad.addColorStop(1,   '#1a0505');
+  } else {
+    skyGrad.addColorStop(0,   '#1a0a2e');
+    skyGrad.addColorStop(0.5, '#3d1a5a');
+    skyGrad.addColorStop(1,   '#7b2d00');
+  }
+  ctx.fillStyle = skyGrad;
+  ctx.fillRect(0, 0, W, GY);
+
+  // Stars at night
+  if (isNight) drawStars(ts, W, GY);
+
+  // Moon
+  if (isNight) {
+    ctx.save();
+    ctx.fillStyle = '#ffeebb';
+    ctx.shadowColor = '#ffddaa';
+    ctx.shadowBlur = 30;
+    ctx.beginPath();
+    ctx.arc(W * 0.82, H * 0.12, 38, 0, Math.PI * 2);
+    ctx.fill();
+    // Crescent overlay
+    ctx.fillStyle = isNight ? '#08001a' : '#3d1a5a';
+    ctx.beginPath();
+    ctx.arc(W * 0.82 + 14, H * 0.12 - 6, 32, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  } else {
+    // Sun glow
+    ctx.save();
+    ctx.fillStyle = '#ff9933';
+    ctx.shadowColor = '#ff6600';
+    ctx.shadowBlur = 40;
+    ctx.beginPath();
+    ctx.arc(W * 0.15, H * 0.15, 30, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Mountains / silhouette
+  drawMountains(W, GY);
+
+  // Ground
+  const groundGrad = ctx.createLinearGradient(0, GY, 0, H);
+  groundGrad.addColorStop(0, isNight ? '#180800' : '#2a1505');
+  groundGrad.addColorStop(1, isNight ? '#0a0400' : '#1a0c03');
+  ctx.fillStyle = groundGrad;
+  ctx.fillRect(0, GY, W, H - GY);
+  // Ground line
+  ctx.strokeStyle = isNight ? '#4a2208' : '#5a3010';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(0, GY); ctx.lineTo(W, GY); ctx.stroke();
+
+  // Nest
+  drawNest(GY);
+
+  // Baby dragons
+  babyDragons.forEach((b, i) => {
+    drawBabyDragon(b, i, ts, GY);
+  });
+
+  // Eggs
+  drawEggs(GY);
+
+  // Player dragon
+  drawPlayerDragon(ts, GY);
+
+  // Flamethrower beam
+  if (isFlamethrowerActive(ts)) drawFlamethrower(ts);
+
+  // Enemies
+  enemies.forEach(e => drawEnemy(e, ts));
+
+  // Sweep dragons
+  sweepDragons.forEach(s => drawSweepDragon(s, ts));
+
+  // Fireballs
+  fireballs.forEach(f => drawFireball(f, ts));
+
+  // Particles
+  particles.forEach(p => drawParticle(p));
+
+  // Aim reticle
+  drawReticle(ts);
+}
+
+// ── STARS ─────────────────────────────────────────────────────────
+const starField = Array.from({length: 120}, () => ({
+  x: Math.random(), y: Math.random(),
+  r: Math.random() * 1.5 + 0.4,
+  phase: Math.random() * Math.PI * 2,
+}));
+function drawStars(ts, W, GY) {
+  starField.forEach(s => {
+    const alpha = 0.5 + 0.5 * Math.sin(ts * 0.001 + s.phase);
+    ctx.fillStyle = `rgba(255,245,220,${alpha})`;
+    ctx.beginPath();
+    ctx.arc(s.x * W, s.y * GY, s.r, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+// ── MOUNTAINS ─────────────────────────────────────────────────────
+function drawMountains(W, GY) {
+  ctx.fillStyle = isNight ? '#0d0005' : '#1e0a30';
+  ctx.beginPath();
+  ctx.moveTo(0, GY);
+  const pts = [0.05,0.12,0.18,0.27,0.35,0.42,0.51,0.60,0.68,0.77,0.85,0.93,1.0];
+  const hs  = [0.88,0.72,0.82,0.65,0.78,0.70,0.75,0.68,0.80,0.73,0.77,0.84,0.88];
+  pts.forEach((px, i) => ctx.lineTo(px * W, hs[i] * GY));
+  ctx.lineTo(W, GY);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = isNight ? '#150008' : '#2a0f42';
+  ctx.beginPath();
+  ctx.moveTo(0, GY);
+  const pts2 = [0,0.08,0.16,0.25,0.33,0.44,0.55,0.64,0.73,0.82,0.90,1.0];
+  const hs2  = [0.96,0.80,0.90,0.74,0.86,0.78,0.85,0.76,0.88,0.80,0.90,0.96];
+  pts2.forEach((px, i) => ctx.lineTo(px * W, hs2[i] * GY));
+  ctx.lineTo(W, GY);
+  ctx.closePath();
+  ctx.fill();
+}
+
+// ── NEST ──────────────────────────────────────────────────────────
+function drawNest(GY) {
+  const cx = player.x, cy = GY;
+  // Nest bowl
+  ctx.fillStyle = '#3a1a05';
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + 8, 90, 28, 0, 0, Math.PI);
+  ctx.fill();
+  // Nest rim twigs
+  ctx.strokeStyle = '#7a4010';
+  ctx.lineWidth = 3;
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI;
+    const rx = Math.cos(a) * 90, ry = Math.sin(a) * 22;
+    ctx.beginPath();
+    ctx.moveTo(cx + rx * 0.6, cy + ry * 0.6 + 8);
+    ctx.lineTo(cx + rx, cy - ry + 8);
+    ctx.stroke();
+  }
+}
+
+// ── EGGS ──────────────────────────────────────────────────────────
+function drawEggs(GY) {
+  const cx = player.x;
+  const positions = [cx - 38, cx, cx + 38];
+  eggs.forEach((e, i) => {
+    if (e.hatched) return;
+    const ex = positions[i], ey = GY - 12;
+    ctx.save();
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(ex, ey + 14, 14, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Egg body
+    const grad = ctx.createRadialGradient(ex - 4, ey - 6, 2, ex, ey, 16);
+    grad.addColorStop(0, '#ffe8a0');
+    grad.addColorStop(0.6, '#d4aa40');
+    grad.addColorStop(1, '#7a5010');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.ellipse(ex, ey, 12, 16, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Shimmer
+    ctx.fillStyle = 'rgba(255,255,200,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(ex - 3, ey - 5, 5, 7, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  });
+}
+
+// ── PLAYER DRAGON ─────────────────────────────────────────────────
+function drawPlayerDragon(ts, GY) {
+  const cx = player.x, cy = GY - 30;
+  ctx.save();
+  // Body glow (true form = blue)
+  if (trueForm) {
+    ctx.shadowColor = '#0088ff';
+    ctx.shadowBlur = 30;
+  } else {
+    ctx.shadowColor = '#ff6600';
+    ctx.shadowBlur = 15;
+  }
+
+  // Wing flap animation
+  const flap = Math.sin(ts * 0.003) * 0.15;
+
+  // Body
+  const bodyColor = trueForm ? '#1a2a6c' : '#1a4a1a';
+  ctx.fillStyle = bodyColor;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, 36, 24, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Scales highlight
+  ctx.fillStyle = trueForm ? '#2244aa' : '#2a7a2a';
+  ctx.beginPath();
+  ctx.ellipse(cx - 5, cy - 6, 22, 14, -0.2, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Wings
+  ctx.fillStyle = trueForm ? '#0d1a55' : '#124a12';
+  // Left wing
+  ctx.beginPath();
+  ctx.moveTo(cx - 20, cy - 8);
+  ctx.bezierCurveTo(cx - 70, cy - 50 + flap * 30, cx - 80, cy - 20 + flap * 40, cx - 50, cy + 5);
+  ctx.closePath();
+  ctx.fill();
+  // Right wing
+  ctx.beginPath();
+  ctx.moveTo(cx + 20, cy - 8);
+  ctx.bezierCurveTo(cx + 70, cy - 50 - flap * 30, cx + 80, cy - 20 - flap * 40, cx + 50, cy + 5);
+  ctx.closePath();
+  ctx.fill();
+
+  // Head
+  ctx.fillStyle = trueForm ? '#1a3a8c' : '#1a5a1a';
+  ctx.beginPath();
+  ctx.ellipse(cx + 28, cy - 12, 18, 13, 0.3, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Eye
+  ctx.fillStyle = trueForm ? '#00ffff' : '#ffaa00';
+  ctx.beginPath();
+  ctx.arc(cx + 36, cy - 14, 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#000';
+  ctx.beginPath();
+  ctx.arc(cx + 37, cy - 14, 2, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Horns
+  ctx.strokeStyle = trueForm ? '#88aaff' : '#aaff88';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(cx + 24, cy - 22);
+  ctx.lineTo(cx + 20, cy - 38);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx + 32, cy - 22);
+  ctx.lineTo(cx + 36, cy - 36);
+  ctx.stroke();
+
+  // Tail
+  ctx.strokeStyle = trueForm ? '#1a2a6c' : '#1a4a1a';
+  ctx.lineWidth = 8;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(cx - 32, cy + 4);
+  ctx.bezierCurveTo(cx - 60, cy + 20, cx - 80, cy - 10, cx - 90, cy + 5);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+// ── BABY DRAGON ───────────────────────────────────────────────────
+function drawBabyDragon(b, idx, ts, GY) {
+  const bx = player.x - 80 - idx * 45;
+  const by = GY - 18 + Math.sin(ts * 0.004 + idx) * 4;
+  ctx.save();
+  ctx.shadowColor = b.blue ? '#00cfff' : '#ff8800';
+  ctx.shadowBlur = 10;
+
+  const c = b.blue ? '#1a2255' : '#2a5a1a';
+  ctx.fillStyle = c;
+  ctx.beginPath();
+  ctx.ellipse(bx, by, 14, 10, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Wings
+  ctx.fillStyle = b.blue ? '#0d1140' : '#1a4010';
+  const flap = Math.sin(ts * 0.006 + idx) * 0.2;
+  ctx.beginPath();
+  ctx.moveTo(bx - 7, by - 3);
+  ctx.bezierCurveTo(bx - 28, by - 20 + flap * 15, bx - 30, by, bx - 18, by + 3);
+  ctx.closePath(); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(bx + 7, by - 3);
+  ctx.bezierCurveTo(bx + 28, by - 20 - flap * 15, bx + 30, by, bx + 18, by + 3);
+  ctx.closePath(); ctx.fill();
+
+  // Head
+  ctx.fillStyle = c;
+  ctx.beginPath();
+  ctx.ellipse(bx + 13, by - 5, 8, 6, 0.3, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Eye
+  ctx.fillStyle = b.blue ? '#00ffff' : '#ffaa00';
+  ctx.beginPath();
+  ctx.arc(bx + 17, by - 6, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+// ── ENEMIES ───────────────────────────────────────────────────────
+function drawEnemy(e, ts) {
+  ctx.save();
+  // HP bar
+  const bx = e.x - 20, by = e.y - e.size * 0.6 - 10;
+  ctx.fillStyle = '#333';
+  ctx.fillRect(bx, by, 40, 5);
+  ctx.fillStyle = e.hp / e.maxHp > 0.5 ? '#3dcc5f' : '#e03030';
+  ctx.fillRect(bx, by, 40 * (e.hp / e.maxHp), 5);
+
+  // Aerial enemy: subtle dive trail + sky glow
+  if (e.aerial) {
+    ctx.shadowColor = '#aa44ff';
+    ctx.shadowBlur = 14;
+    // Draw a short trail behind them
+    for (let i = 1; i <= 3; i++) {
+      ctx.globalAlpha = 0.15;
+      ctx.fillStyle = '#cc88ff';
+      ctx.beginPath();
+      ctx.arc(e.x - e.vx * i * 4, e.y - e.vy * i * 4, e.size * 0.18, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  } else {
+    ctx.shadowColor = '#ff2200';
+    ctx.shadowBlur = e.hp <= 1 ? 15 : 5;
+  }
+
+  ctx.font = `${e.size}px serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  // Mirror horizontally based on movement direction
+  if (e.vx > 0) { ctx.scale(-1, 1); ctx.fillText(e.emoji, -e.x, e.y); }
+  else ctx.fillText(e.emoji, e.x, e.y);
+  ctx.restore();
+}
+
+// ── SWEEP DRAGON ─────────────────────────────────────────────────
+function drawSweepDragon(s, ts) {
+  ctx.save();
+  ctx.globalAlpha = 0.9;
+  ctx.shadowColor = '#00cfff';
+  ctx.shadowBlur = 20;
+  if (s.vx > 0) { ctx.scale(-1,1); ctx.font = '40px serif'; ctx.textAlign = 'center'; ctx.fillText('🐲', -s.x, s.y); }
+  else { ctx.font = '40px serif'; ctx.textAlign = 'center'; ctx.fillText('🐲', s.x, s.y); }
+  // Trail
+  for (let i = 1; i <= 4; i++) {
+    ctx.globalAlpha = 0.2 - i * 0.04;
+    ctx.fillStyle = '#00cfff';
+    ctx.beginPath();
+    ctx.arc(s.x - s.vx * i * 6, s.y, 8 - i, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+// ── FIREBALLS ─────────────────────────────────────────────────────
+function drawFireball(f, ts) {
+  ctx.save();
+  ctx.shadowBlur = 18;
+  ctx.shadowColor = f.blue ? '#00cfff' : '#ff6600';
+  const grad = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.r);
+  if (f.blue) {
+    grad.addColorStop(0, '#ffffff');
+    grad.addColorStop(0.4, '#00cfff');
+    grad.addColorStop(1, 'rgba(0,80,180,0)');
+  } else {
+    grad.addColorStop(0, '#ffffff');
+    grad.addColorStop(0.4, '#ffdd00');
+    grad.addColorStop(0.8, '#ff6600');
+    grad.addColorStop(1, 'rgba(180,20,0,0)');
+  }
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+// ── FLAMETHROWER ─────────────────────────────────────────────────
+function drawFlamethrower(ts) {
+  const cx = player.x + 50, cy = player.y - 20;
+  const dir = mouseX > cx ? 1 : -1;
+  const ex = cx + dir * FLAMETHROWER_RANGE;
+  ctx.save();
+  for (let i = 0; i < 14; i++) {
+    const t = i / 14;
+    const nx = cx + (ex - cx) * t + (Math.random() - 0.5) * 30 * t;
+    const ny = cy + (Math.random() - 0.5) * 40 * t;
+    const r = 22 * (1 - t) + 5;
+    const grad = ctx.createRadialGradient(nx, ny, 0, nx, ny, r);
+    const alpha = 0.18 - t * 0.1;
+    if (trueForm) {
+      grad.addColorStop(0, `rgba(0,200,255,${alpha * 4})`);
+      grad.addColorStop(1, `rgba(0,50,180,0)`);
+    } else {
+      grad.addColorStop(0, `rgba(255,160,0,${alpha * 4})`);
+      grad.addColorStop(1, `rgba(200,30,0,0)`);
+    }
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(nx, ny, r, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function isFlamethrowerActive(ts) {
+  if (trueForm) {
+    // ab3 active = flamethrower (ab2 from egg2 becomes flamethrower in true form)
+    return ab3.active && ts < ab3.activeEnd;
+  }
+  return false;
+}
+
+function flamethrowerTick(ts, dt) {
+  const cx = player.x + 50, cy = player.y - 20;
+  const dir = mouseX > cx ? 1 : -1;
+  enemies.forEach((e, ei) => {
+    const dx = e.x - cx, dy = e.y - cy;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    // Ground enemies: horizontal range check; aerial: full 2D range
+    const inRange = e.aerial
+      ? dist < FLAMETHROWER_RANGE
+      : (Math.sign(dx) === dir && Math.abs(dx) < FLAMETHROWER_RANGE && Math.abs(dy) < 80);
+    if (inRange) {
+      e.hp -= 0.04 * (dt / 16);
+      if (e.hp <= 0) killEnemy(ei, e, ts);
+    }
+  });
+}
+
+// ── PARTICLES ─────────────────────────────────────────────────────
+function drawParticle(p) {
+  ctx.save();
+  ctx.globalAlpha = p.life / p.maxLife;
+  ctx.fillStyle = p.color;
+  ctx.shadowColor = p.color;
+  ctx.shadowBlur = 6;
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function spawnHitParticles(x, y, color, count) {
+  for (let i = 0; i < count; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const s = Math.random() * 4 + 1;
+    particles.push({ x, y, vx: Math.cos(a)*s, vy: Math.sin(a)*s - 2, r: Math.random()*4+2, color, life: 25, maxLife: 25 });
+  }
+}
+
+// ── AIM RETICLE ───────────────────────────────────────────────────
+function drawReticle(ts) {
+  const pulse = 0.7 + 0.3 * Math.sin(ts * 0.008);
+  ctx.save();
+  ctx.strokeStyle = `rgba(255,160,0,${pulse})`;
+  ctx.lineWidth = 1.5;
+  const r = 14;
+  ctx.beginPath();
+  ctx.arc(mouseX, mouseY, r, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(mouseX - r - 5, mouseY); ctx.lineTo(mouseX - r + 4, mouseY);
+  ctx.moveTo(mouseX + r - 4, mouseY); ctx.lineTo(mouseX + r + 5, mouseY);
+  ctx.moveTo(mouseX, mouseY - r - 5); ctx.lineTo(mouseX, mouseY - r + 4);
+  ctx.moveTo(mouseX, mouseY + r - 4); ctx.lineTo(mouseX, mouseY + r + 5);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// ── SHOOT ─────────────────────────────────────────────────────────
+function shootFireball(tx, ty) {
+  const ox = player.x + 50, oy = player.y - 20;
+  const dx = tx - ox, dy = ty - oy;
+  const len = Math.sqrt(dx*dx + dy*dy);
+  const isBlue = (ab2.active && performance.now() < ab2.activeEnd) || trueForm;
+  const speed = isBlue ? BLUE_FIREBALL_SPEED : FIREBALL_SPEED;
+  fireballs.push({
+    x: ox, y: oy,
+    vx: (dx/len)*speed, vy: (dy/len)*speed,
+    r: isBlue ? 16 : 7,
+    blue: isBlue,
+    life: 120,
+  });
+  player.fireballsShot++;
+}
+
+// ── SPAWN ENEMY ───────────────────────────────────────────────────
+const AERIAL_TYPES = [
+  { name: 'griffin', emoji: '🦁', hp: 3, speed: 1.6, score: 22, size: 36, dmg: 10, aerial: true },
+  { name: 'phoenix', emoji: '🦜', hp: 2, speed: 2.2, score: 20, size: 30, dmg: 8,  aerial: true },
+  { name: 'roc',     emoji: '🦅', hp: 5, speed: 1.0, score: 30, size: 44, dmg: 16, aerial: true },
+  { name: 'bat',     emoji: '🦇', hp: 1, speed: 2.8, score: 12, size: 26, dmg: 6,  aerial: true },
+];
+
+function spawnEnemy(ts) {
+  const elapsed = ts - startTime;
+  const GY = canvas.height * GROUND_Y_FRAC;
+  const scale = 1 + (isEndless ? (endlessWave - 1) * 0.18 : 0) + (isFrenzy ? 0.4 : 0);
+  const speedMult = (isFrenzy ? 1.5 : 1) * (1 + (isEndless ? (endlessWave - 1) * 0.1 : 0));
+
+  // Aerial chance grows with time and frenzy
+  const aerialChance = Math.min(0.55, 0.25 + (elapsed / (10 * 60000)) * 0.2 + (isFrenzy ? 0.1 : 0));
+
+  if (Math.random() < aerialChance) {
+    // ── AERIAL enemy: dives from the top ──
+    let apool = AERIAL_TYPES.slice(0, 2);
+    if (elapsed > 3 * 60000) apool = AERIAL_TYPES.slice(0, 3);
+    if (elapsed > 6 * 60000 || isFrenzy) apool = AERIAL_TYPES;
+    const type = apool[Math.floor(Math.random() * apool.length)];
+
+    const startX = Math.random() * canvas.width;
+    const startY = -type.size;
+    const targetX = player.x + (Math.random() - 0.5) * 80;
+    const targetY = GY - 20;
+    const dx = targetX - startX, dy = targetY - startY;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    const spd = type.speed * speedMult;
+
+    enemies.push({
+      ...type,
+      maxHp: Math.ceil(type.hp * scale),
+      hp: Math.ceil(type.hp * scale),
+      x: startX, y: startY,
+      baseY: startY,
+      vx: (dx / len) * spd,
+      vy: (dy / len) * spd,
+      phase: Math.random() * Math.PI * 2,
+      wobblePhase: Math.random() * Math.PI * 2,
+      size: type.size,
+      aerial: true,
+    });
+  } else {
+    // ── GROUND enemy: walks in from the sides ──
+    let pool = ENEMY_TYPES.slice(0, 2);
+    if (elapsed > 2 * 60000) pool = ENEMY_TYPES.slice(0, 4);
+    if (elapsed > 5 * 60000) pool = ENEMY_TYPES.slice(0, 6);
+    if (elapsed > 10 * 60000 || isFrenzy) pool = ENEMY_TYPES;
+    const type = pool[Math.floor(Math.random() * pool.length)];
+    const fromLeft = Math.random() < 0.5;
+
+    const e = {
+      ...type,
+      maxHp: Math.ceil(type.hp * scale),
+      hp: Math.ceil(type.hp * scale),
+      speed: type.speed * speedMult,
+      x: fromLeft ? -60 : canvas.width + 60,
+      y: GY - type.size * 0.4,
+      baseY: GY - type.size * 0.4,
+      vx: 0, vy: 0,
+      phase: Math.random() * Math.PI * 2,
+      size: type.size,
+      aerial: false,
+    };
+    e.vx = fromLeft ? e.speed : -e.speed;
+    enemies.push(e);
+  }
+}
+
+// ── KILL ENEMY ────────────────────────────────────────────────────
+function killEnemy(idx, e, ts) {
+  score += e.score * (isFrenzy ? 2 : 1);
+  spawnHitParticles(e.x, e.y, '#ffdd00', 12);
+  enemies.splice(idx, 1);
+}
+
+// ── ABILITIES ─────────────────────────────────────────────────────
+function useAb1() {
+  const now = performance.now();
+  if (!ab1.unlocked) return;
+  if (now - ab1.lastUsed < ab1.cooldown) return;
+  ab1.lastUsed = now;
+  // Sweep from both sides
+  const GY = canvas.height * GROUND_Y_FRAC;
+  sweepDragons.push({ x: -80, y: GY - 80 - Math.random()*60, vx: 14, hit: new Set() });
+  sweepDragons.push({ x: canvas.width + 80, y: GY - 80 - Math.random()*40, vx: -14, hit: new Set() });
+  announce('🐣 Baby Dragon Sweep!', '#00cfff');
+}
+
+function useAb2() {
+  const now = performance.now();
+  if (trueForm) {
+    // In true form, E activates flamethrower (mapped to ab3)
+    useFlamethrower();
+    return;
+  }
+  if (!ab2.unlocked) return;
+  const cd = ab2.cooldown + ab2.duration;
+  if (now - ab2.lastUsed < cd) return;
+  ab2.lastUsed = now;
+  ab2.active = true;
+  ab2.activeEnd = now + ab2.duration;
+  announce('💙 Blue Flame activated!', '#00cfff');
+}
+
+function useFlamethrower() {
+  const now = performance.now();
+  if (now - ab3.lastUsed < ab3.cooldown + ab3.duration) return;
+  if (ab3.active) return;
+  ab3.lastUsed = now;
+  ab3.active = true;
+  ab3.activeEnd = now + ab3.duration;
+  announce('🔥 Flamethrower!', '#ff4400');
+}
+
+function useAb3() {
+  const now = performance.now();
+  if (!ab3.unlocked) return;
+  if (trueForm) {
+    // R = flamethrower in true form
+    useFlamethrower();
+    return;
+  }
+  // First use: TRUE DRAGON ASCENSION
+  if (!ab3.used) {
+    ab3.used = true;
+    activateTrueDragon(now);
+  }
+}
+
+function activateTrueDragon(now) {
+  trueForm = true;
+  isFrenzy = true;
+  isNight = true;
+  // ab2 passive is now always on (blue fireballs) — handled by trueForm flag
+  // ab1 sweep now deals blue damage — handled by trueForm flag
+  ab3.lastUsed = now;
+  ab3.cooldown = 7000;
+  // Show frenzy screen
+  const fa = document.getElementById('frenzy-announce');
+  fa.style.opacity = '1';
+  setTimeout(() => { fa.style.opacity = '0'; }, 3500);
+  announce('🐉 TRUE DRAGON AWAKENED!', '#ff2200');
+  // Speed up spawns massively
+  spawnInterval = Math.max(400, spawnInterval - 200);
+  // Give player full HP
+  player.hp = Math.min(player.maxHp, player.hp + 30);
+}
+
+function checkAbilityExpiry(ts) {
+  const now = performance.now();
+  if (ab2.active && now >= ab2.activeEnd) {
+    ab2.active = false;
+  }
+  if (ab3.active && now >= ab3.activeEnd) {
+    ab3.active = false;
+  }
+}
+
+// ── EGG HATCHING ──────────────────────────────────────────────────
+function hatchEgg(idx, ts) {
+  eggs[idx].hatched = true;
+  eggsHatched++;
+  document.getElementById('egg-icon' + idx).textContent = '🐣';
+  document.getElementById('egg-icon' + idx).classList.add('hatched');
+  document.getElementById('egg-fill' + idx).style.width = '100%';
+  document.getElementById('egg-fill' + idx).style.background = '#888';
+
+  if (idx === 0) {
+    ab1.unlocked = true;
+    babyDragons.push({ blue: false });
+    announce('🥚 Egg 1 hatched! Ability unlocked: Baby Dragon Sweep [Q]', '#ffd700');
+  }
+  if (idx === 1) {
+    ab2.unlocked = true;
+    babyDragons.push({ blue: true });
+    announce('🥚 Egg 2 hatched! Ability unlocked: Blue Flame [E] (15s CD)', '#00cfff');
+  }
+  if (idx === 2) {
+    ab3.unlocked = true;
+    babyDragons.push({ blue: true });
+    announce('🥚 Final egg hatched! Ability unlocked: True Dragon [R] — Press R!', '#ff2200');
+  }
+}
+
+// ── HUD UPDATE ────────────────────────────────────────────────────
+function updateHUD(ts) {
+  // HP bar
+  const hpPct = (player.hp / player.maxHp * 100).toFixed(0);
+  document.getElementById('hp-bar').style.width = hpPct + '%';
+  document.getElementById('hp-text').textContent = Math.ceil(player.hp) + '/' + player.maxHp;
+
+  // Ability slots
+  const now = performance.now();
+  updateAbSlot('ab1', ab1, now, 12000);
+  if (trueForm) {
+    // E slot shows flamethrower
+    const ab3cd = ab3.cooldown + ab3.duration;
+    const elapsed3 = now - ab3.lastUsed;
+    const slot = document.getElementById('ab2');
+    slot.querySelector('.ability-icon').textContent = '🔥';
+    if (ab3.active) {
+      slot.className = 'ability-slot active';
+      const rem = ((ab3.activeEnd - now) / 1000).toFixed(1);
+      document.getElementById('ab2-cd').textContent = rem + 's';
+      document.getElementById('ab2-ov').style.display = 'none';
+    } else if (elapsed3 < ab3cd) {
+      slot.className = 'ability-slot cooling';
+      const rem = ((ab3cd - elapsed3) / 1000).toFixed(1);
+      document.getElementById('ab2-ov').textContent = rem + 's';
+      document.getElementById('ab2-ov').style.display = 'flex';
+      document.getElementById('ab2-cd').textContent = '';
+    } else {
+      slot.className = 'ability-slot ready';
+      document.getElementById('ab2-cd').textContent = 'READY';
+      document.getElementById('ab2-ov').style.display = 'none';
+    }
+    // R slot disabled
+    const ab3slot = document.getElementById('ab3');
+    ab3slot.className = 'ability-slot';
+    document.getElementById('ab3-cd').textContent = '';
+    document.getElementById('ab3-ov').style.display = 'none';
+  } else {
+    updateAbSlot('ab2', ab2, now, ab2.cooldown + ab2.duration, true);
+    const ab3slot = document.getElementById('ab3');
+    if (ab3.unlocked && !ab3.used) {
+      ab3slot.className = 'ability-slot ready';
+      document.getElementById('ab3-cd').textContent = 'READY';
+      document.getElementById('ab3-ov').style.display = 'none';
+    } else if (!ab3.unlocked) {
+      ab3slot.className = 'ability-slot locked';
+    }
+  }
+}
+
+function updateAbSlot(id, ab, now, totalCd, checkActive) {
+  const slot = document.getElementById(id);
+  const ov = document.getElementById(id + '-cd');
+  const overlay = document.getElementById(id + '-ov');
+  if (!ab.unlocked) { slot.className = 'ability-slot locked'; return; }
+  const elapsed = now - ab.lastUsed;
+  if (checkActive && ab.active) {
+    slot.className = 'ability-slot active';
+    const rem = ((ab.activeEnd - now) / 1000).toFixed(1);
+    ov.textContent = rem + 's';
+    overlay.style.display = 'none';
+    return;
+  }
+  if (elapsed < totalCd) {
+    slot.className = 'ability-slot cooling';
+    const rem = ((totalCd - elapsed) / 1000).toFixed(1);
+    overlay.textContent = rem + 's';
+    overlay.style.display = 'flex';
+    ov.textContent = '';
+  } else {
+    slot.className = 'ability-slot ready';
+    ov.textContent = 'READY';
+    overlay.style.display = 'none';
+  }
+}
+
+// ── ANNOUNCE ─────────────────────────────────────────────────────
+let announceTimer = null;
+function announce(msg, color) {
+  const el = document.getElementById('hatch-announce');
+  el.textContent = msg;
+  el.style.color = color || '#ffd700';
+  el.style.borderColor = color || '#ffd700';
+  el.style.opacity = '1';
+  if (announceTimer) clearTimeout(announceTimer);
+  announceTimer = setTimeout(() => { el.style.opacity = '0'; }, 3500);
+}
+
+// ── VICTORY / ENDLESS ─────────────────────────────────────────────
+function showVictory() {
+  if (document.getElementById('victoryScreen').style.display === 'flex') return;
+  gameRunning = false;
+  document.getElementById('victoryScreen').style.display = 'flex';
+}
+
+function endGame() {
+  document.getElementById('victoryScreen').style.display = 'none';
+  document.getElementById('scoreScreen').style.display = 'flex';
+  document.getElementById('final-score-text').textContent =
+    `You earned ${score} points, defeated ${Math.floor(score/15)} enemies, and shot ${player.fireballsShot} fireballs.\n\nWell done, Dragon Guardian!`;
+}
+
+function startEndless() {
+  document.getElementById('victoryScreen').style.display = 'none';
+  isEndless = true;
+  endlessWave = 1;
+  endlessWaveStart = performance.now();
+  document.getElementById('endless-timer').style.display = 'block';
+  gameRunning = true;
+  spawnInterval = 700;
+  if (!isFrenzy) { isFrenzy = true; isNight = true; }
+  announce('⚡ Endless Mode! Waves every 2 minutes!', '#00cfff');
+  requestAnimationFrame(gameLoop);
+}
+
+function updateEndlessTimer(ts) {
+  const waveElapsed = ts - endlessWaveStart;
+  const rem = Math.max(0, ENDLESS_WAVE_TIME - waveElapsed);
+  const m = Math.floor(rem / 60000);
+  const s = Math.floor((rem % 60000) / 1000);
+  document.getElementById('endless-wave').textContent = endlessWave;
+  document.getElementById('wave-cd').textContent = m + ':' + String(s).padStart(2,'0');
+}
+
+function flashWaveStart() {
+  announce(`⚡ Wave ${endlessWave}! Enemies grow stronger!`, '#ff8800');
+}
+
+// ── GAME OVER ─────────────────────────────────────────────────────
+function gameOver(msg) {
+  gameRunning = false;
+  document.getElementById('gameOverScreen').style.display = 'flex';
+  document.getElementById('go-text').textContent = msg + '\n\nFinal score: ' + score;
+}
+
+// Prevent right-click context menu on canvas
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+// Initial frame to show background
+function drawInitialBg() {
+  const W = canvas.width, H = canvas.height;
+  const GY = Math.floor(H * GROUND_Y_FRAC);
+  const skyGrad = ctx.createLinearGradient(0,0,0,GY);
+  skyGrad.addColorStop(0,'#1a0a2e'); skyGrad.addColorStop(0.5,'#3d1a5a'); skyGrad.addColorStop(1,'#7b2d00');
+  ctx.fillStyle = skyGrad; ctx.fillRect(0,0,W,GY);
+  drawMountains(W,GY);
+  const groundGrad = ctx.createLinearGradient(0,GY,0,H);
+  groundGrad.addColorStop(0,'#2a1505'); groundGrad.addColorStop(1,'#1a0c03');
+  ctx.fillStyle = groundGrad; ctx.fillRect(0,GY,W,H-GY);
+  player.x = W/2; player.y = GY - 30;
+  drawNest(GY); drawEggs(GY); drawPlayerDragon(0,GY);
+}
+drawInitialBg();
+</script>
+</body>
+</html>
